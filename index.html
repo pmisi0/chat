@@ -1,152 +1,45 @@
 <!DOCTYPE html>
 <html lang="hu">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Logisztikai városépítő</title>
-<style>
-  html, body { margin:0; padding:0; width:100%; height:100%; background:#000; overflow:hidden; }
-  #game { position:fixed; top:0; left:0; width:100%; height:100%; display:block; touch-action:none; }
-</style>
+    <meta charset="UTF-8">
+    <title>Chat Szerverrel</title>
+    <style>
+        body { font-family: sans-serif; display: flex; flex-direction: column; height: 100vh; margin: 0; }
+        #chat { flex: 1; border: 1px solid #ccc; overflow-y: scroll; padding: 10px; }
+        #input-area { display: flex; padding: 10px; }
+        input { flex: 1; padding: 10px; }
+        button { padding: 10px; }
+    </style>
 </head>
 <body>
 
-<canvas id="game"></canvas>
+    <div id="chat"></div>
+    <div id="input-area">
+        <input id="message" type="text" placeholder="Írj valamit...">
+        <button onclick="sendMessage()">Küldés</button>
+    </div>
 
-<script>
-const canvas = document.getElementById("game");
-const ctx = canvas.getContext("2d");
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io(); // Kapcsolódás a szerverhez
+        const chat = document.getElementById('chat');
+        const input = document.getElementById('message');
 
-// ===== ADATOK =====
-const resources = {
-  wood:{name:"Fa",stock:200},
-  stone:{name:"Kő",stock:150},
-  iron:{name:"Vasérc",stock:120},
-  steel:{name:"Acél",stock:0}
-};
+        // Üzenet érkezése a szervertől
+        socket.on('chat message', (msg) => {
+            const item = document.createElement('div');
+            item.textContent = msg;
+            chat.appendChild(item);
+            chat.scrollTop = chat.scrollHeight;
+        });
 
-const buildings = [
-  {id:"house",name:"Lakóház",need:{wood:40,stone:20},have:{},built:false,x:0,y:0},
-  {id:"warehouse",name:"Raktár",need:{wood:30,iron:20},have:{},built:false,x:0,y:0},
-  {id:"steelMill",name:"Acélmű",need:{iron:50},have:{},built:false,x:0,y:0},
-  {id:"hospital",name:"Kórház",need:{steel:30,stone:30},have:{},built:false,x:0,y:0}
-];
-
-const vehicles = [
-  {type:"train",name:"Vonat",emoji:"🚂",capacity:20,cargo:{},stops:[],index:0,dir:1,speed:2,x:0,y:0},
-  {type:"ship", name:"Hajó", emoji:"🚢",capacity:25,cargo:{},stops:[],index:0,dir:1,speed:1.5,x:0,y:0},
-  {type:"plane",name:"Repülő",emoji:"✈️",capacity:8,cargo:{},stops:[],index:0,dir:1,speed:3,x:0,y:0}
-];
-
-let stopsTrain=[],stopsShip=[],stopsPlane=[];
-let trackY,waterY,airY;
-let selectedBuilding=null, selectedVehicle=null, selectedResource=null, selectedAmount=0;
-const buttons=[];
-
-// ===== VILÁG ELRENDEZÉSE =====
-function setupWorld() {
-  canvas.width  = window.innerWidth;
-  canvas.height = window.innerHeight;
-  const w=canvas.width, h=canvas.height;
-  const topH=h*0.35, laneH=(h-topH)/3;
-
-  airY=topH+laneH*0.5; trackY=topH+laneH*1.5; waterY=topH+laneH*2.5;
-
-  stopsTrain=[]; stopsShip=[]; stopsPlane=[];
-  for(let i=0;i<4;i++){
-    const x=w*0.15+i*(w*0.25);
-    stopsTrain.push({x,y:trackY});
-    stopsShip.push({x,y:waterY});
-    stopsPlane.push({x,y:airY});
-  }
-
-  vehicles[0].y=trackY; vehicles[0].stops=stopsTrain; vehicles[0].x=stopsTrain[0].x;
-  vehicles[1].y=waterY; vehicles[1].stops=stopsShip;  vehicles[1].x=stopsShip[0].x;
-  vehicles[2].y=airY;   vehicles[2].stops=stopsPlane; vehicles[2].x=stopsPlane[0].x;
-
-  const cx=w*0.5, cy=topH*0.5, dx=w*0.25, dy=topH*0.25;
-  buildings[0].x=cx-dx; buildings[0].y=cy-dy;
-  buildings[1].x=cx+dx; buildings[1].y=cy-dy;
-  buildings[2].x=cx-dx; buildings[2].y=cy+dy;
-  buildings[3].x=cx+dx; buildings[3].y=cy+dy;
-}
-
-// ===== LOGIKA =====
-function moveVehicles(){
-  vehicles.forEach(v=>{
-    if(!v.stops.length) return;
-    const t=v.stops[v.index];
-    const dx=t.x-v.x;
-    if(Math.abs(dx)<2){
-      v.index+=v.dir;
-      if(v.index>=v.stops.length-1 || v.index<=0) v.dir*=-1;
-    } else v.x+=v.speed*Math.sign(dx);
-    
-    buildings.forEach(b=>{
-      if(selectedBuilding && b.id===selectedBuilding.id && Math.hypot(v.x-b.x,v.y-b.y)<40) deliverCargo(v,b);
-    });
-  });
-}
-
-function deliverCargo(v,b){
-  for(const k in v.cargo){ b.have[k]=(b.have[k]||0)+v.cargo[k]; }
-  v.cargo={};
-  let ready=true;
-  for(const k in b.need){ if((b.have[k]||0)<b.need[k]) ready=false; }
-  if(ready){ b.built=true; if(b.id==="steelMill") resources.steel.stock+=50; }
-}
-
-function loadCargo(){
-  if(!selectedBuilding||!selectedVehicle||!selectedResource||selectedAmount<=0) return;
-  const res=resources[selectedResource];
-  if(res.stock<=0) return;
-  let sum=0; for(const k in selectedVehicle.cargo) sum+=selectedVehicle.cargo[k];
-  let amount=Math.min(selectedAmount,res.stock,selectedVehicle.capacity-sum);
-  if(amount>0){ res.stock-=amount; selectedVehicle.cargo[selectedResource]=(selectedVehicle.cargo[selectedResource]||0)+amount; selectedAmount=0; }
-}
-
-// ===== RAJZOLÁS =====
-function draw(){
-  ctx.clearRect(0,0,canvas.width,canvas.height);
-  const w=canvas.width, h=canvas.height, topH=h*0.35, laneH=(h-topH)/3, hudY=h*0.55;
-
-  ctx.fillStyle="#123"; ctx.fillRect(0,0,w,topH);
-  buildings.forEach(b=>{
-    ctx.fillStyle=b.built?"#4caf50":"#ccc";
-    ctx.fillRect(b.x-35,b.y-35,70,70);
-    ctx.fillStyle="#fff"; ctx.fillText(b.name,b.x-30,b.y);
-  });
-
-  ctx.fillStyle="#222"; ctx.fillRect(0,topH,w,laneH*3);
-  vehicles.forEach(v=>{ ctx.font="40px sans-serif"; ctx.fillText(v.emoji,v.x-20,v.y+15); });
-
-  ctx.fillStyle="#111"; ctx.fillRect(0,hudY,w,h-hudY);
-  buttons.length=0;
-
-  // UI rajzolás (marad az eredeti logikád)
-  // ... (Gombok renderelése)
-  
-  requestAnimationFrame(draw);
-}
-
-// ===== KATTINTÁS =====
-canvas.addEventListener("click", e=>{
-  const rect=canvas.getBoundingClientRect(), x=e.clientX-rect.left, y=e.clientY-rect.top;
-  for(const b of buttons){
-    if(x>=b.x && x<=b.x+b.w && y>=b.y && y<=b.y+b.h){
-      if(b.type==="building") selectedBuilding=buildings.find(bb=>bb.id===b.id);
-      else if(b.type==="vehicle") selectedVehicle=vehicles.find(v=>v.type===b.id);
-      else if(b.type==="resource") selectedResource=b.id;
-      else if(b.type==="amount") selectedAmount+=b.value;
-      else if(b.type==="send") loadCargo();
-    }
-  }
-});
-
-// ===== INDÍTÁS =====
-window.addEventListener("resize", setupWorld);
-setupWorld();
-draw();
-</script>
+        // Üzenet küldése
+        function sendMessage() {
+            if (input.value) {
+                socket.emit('chat message', input.value);
+                input.value = '';
+            }
+        }
+    </script>
 </body>
 </html>
