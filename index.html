@@ -2,44 +2,13 @@
 <html lang="hu">
 <head>
     <meta charset="UTF-8">
-    <title>Chat Szerverrel</title>
-    <style>
-        body { font-family: sans-serif; display: flex; flex-direction: column; height: 100vh; margin: 0; }
-        #chat { flex: 1; border: 1px solid #ccc; overflow-y: scroll; padding: 10px; }
-        #input-area { display: flex; padding: 10px; }
-        input { flex: 1; padding: 10px; }
-        button { padding: 10px; }
-    </style>
+    <title>Chatem</title>
 </head>
 <body>
 
-    <div id="chat"></div>
-    <div id="input-area">
-        <input id="message" type="text" placeholder="Írj valamit...">
-        <button onclick="sendMessage()">Küldés</button>
-    </div>
+    <script src="https://minnit.chat/js/embed.js?c=1772345192" defer></script>
+    <span style="display: none;" class="minnit-chat-sembed" data-chatname="https://organizations.minnit.chat/477633300828858/c/Main?embed" data-style="width:90%; height:500px; max-height:90vh;" data-version="1.55">Chat</span>
+    <p class="powered-by-minnit"><a href="https://minnit.chat" target="_blank">Chatroom embedded via Minnit Chat</a></p>
 
-    <script src="/socket.io/socket.io.js"></script>
-    <script>
-        const socket = io(); // Kapcsolódás a szerverhez
-        const chat = document.getElementById('chat');
-        const input = document.getElementById('message');
-
-        // Üzenet érkezése a szervertől
-        socket.on('chat message', (msg) => {
-            const item = document.createElement('div');
-            item.textContent = msg;
-            chat.appendChild(item);
-            chat.scrollTop = chat.scrollHeight;
-        });
-
-        // Üzenet küldése
-        function sendMessage() {
-            if (input.value) {
-                socket.emit('chat message', input.value);
-                input.value = '';
-            }
-        }
-    </script>
 </body>
 </html>
